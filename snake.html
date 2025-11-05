@@ -1,0 +1,742 @@
+<!-- # root/games/snake.html -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>✨ Cute Snake — Play & Top 20 Scores</title>
+
+  <!--
+    Cute Snake — single-file game
+    - Plays in canvas
+    - Arrow / WASD controls + on-screen mobile buttons
+    - Keeps top 20 scores with player names in localStorage ("cute_snake_leaderboard")
+    - Thoroughly commented for easy customization
+  -->
+
+  <style>
+    /* ---------- Visual theme: soft, cute, rounded ---------- */
+    :root{
+      --bg: #fffaf6;
+      --panel: #fff6ea;
+      --accent: #ff8fb1;     /* pink */
+      --accent-2: #ffd07a;   /* peach */
+      --muted: #6b6b6b;
+      --card-shadow: 0 8px 20px rgba(19,21,25,0.06);
+      --glass: rgba(255,255,255,0.6);
+      --round: 14px;
+      --mono: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    html,body{
+      height:100%;
+      margin:0;
+      font-family: var(--mono);
+      background: linear-gradient(180deg, #fffdf9 0%, #fff6ee 100%);
+      color:#2b2b2b;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .wrap{
+      min-height:100%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:28px;
+      box-sizing:border-box;
+      gap:20px;
+      flex-wrap:wrap;
+    }
+
+    .card{
+      background:var(--panel);
+      border-radius:var(--round);
+      box-shadow:var(--card-shadow);
+      padding:18px;
+      width:360px;
+      max-width: calc(100vw - 40px);
+    }
+
+    header{
+      display:flex;
+      gap:12px;
+      align-items:center;
+      margin-bottom:10px;
+    }
+    .logo{
+      width:56px;
+      height:56px;
+      border-radius:12px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:30px;
+      background:linear-gradient(135deg,var(--accent),var(--accent-2));
+      color:white;
+      box-shadow: 0 6px 14px rgba(255,140,150,0.18);
+    }
+    h1{ font-size:18px; margin:0; }
+    .sub{ font-size:12px; color:var(--muted); margin-top:4px;}
+
+    /* Canvas container */
+    .game-area{
+      display:flex;
+      gap:14px;
+      align-items:flex-start;
+      justify-content:center;
+      flex-wrap:wrap;
+    }
+
+    canvas{
+      background:
+        radial-gradient(circle at 10% 10%, rgba(255,255,255,0.4), transparent 10%),
+        linear-gradient(180deg, rgba(255,255,255,0.05), transparent);
+      border-radius:12px;
+      box-shadow: 0 8px 18px rgba(30,30,30,0.07);
+      width:100%;
+      max-width:340px;
+      height:auto;
+      display:block;
+    }
+
+    /* Right panel: scoreboard & controls */
+    .right{
+      width:300px;
+      max-width: calc(100vw - 420px);
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+
+    .stat{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:10px;
+      border-radius:12px;
+      background:var(--glass);
+      backdrop-filter: blur(6px);
+    }
+    .stat strong{ font-size:18px; }
+    .controls{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+    .btn{
+      background:linear-gradient(180deg,#fff,#fff0);
+      border:none;
+      padding:8px 12px;
+      border-radius:10px;
+      cursor:pointer;
+      font-weight:600;
+      box-shadow: 0 6px 12px rgba(0,0,0,0.04);
+    }
+
+    .btn-primary{
+      background: linear-gradient(180deg, #ff9bb0, #ff6b97);
+      color:white;
+      border:none;
+    }
+
+    /* Leaderboard list */
+    .leaderboard{
+      max-height:300px;
+      overflow:auto;
+      padding:8px;
+      border-radius:10px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.4), rgba(255,255,255,0.2));
+      font-size:14px;
+    }
+    .entry{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:8px;
+      border-radius:8px;
+      margin-bottom:6px;
+    }
+    .entry .name{ font-weight:700; }
+    .entry .score{ color:var(--muted); font-weight:700; }
+
+    /* On-screen mobile controls */
+    .mobile-controls{
+      display:none;
+      gap:8px;
+      margin-top:8px;
+      justify-content:center;
+    }
+    .dpad{
+      width:120px;
+      height:120px;
+      display:grid;
+      grid-template-columns:1fr 1fr 1fr;
+      grid-template-rows:1fr 1fr 1fr;
+      gap:6px;
+      align-items:center;
+      justify-items:center;
+      background:transparent;
+    }
+    .dpad button{
+      width:36px; height:36px; border-radius:8px; border:none;
+      background:linear-gradient(180deg,#fff,#fff0); font-weight:700; cursor:pointer;
+    }
+
+    /* Small footnote */
+    .note{ font-size:12px; color:var(--muted); text-align:center; margin-top:6px; }
+
+    /* Responsive */
+    @media (max-width:920px){
+      .right{ width:100%; order:2; }
+      .card{ width:calc(100% - 36px); }
+    }
+
+    @media (max-width:520px){
+      .mobile-controls{ display:flex; }
+      .right{ order:2; width:100%;}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card" role="application" aria-label="Cute Snake game">
+      <header>
+        <div class="logo">🐍</div>
+        <div>
+          <h1>Cute Snake</h1>
+          <div class="sub">Snack, grow, and climb the top 20! ← Use arrows or WASD</div>
+        </div>
+      </header>
+
+      <div class="game-area">
+        <!-- Canvas: drawn by JS -->
+        <canvas id="gameCanvas" width="340" height="340" aria-label="Snake game board"></canvas>
+
+        <!-- Right side with stats / leaderboards -->
+        <div class="right">
+          <div class="stat">
+            <div>
+              <div style="font-size:12px;color:var(--muted)">Score</div>
+              <strong id="scoreDisplay">0</strong>
+            </div>
+            <div>
+              <div style="font-size:12px;color:var(--muted);text-align:right">Speed</div>
+              <strong id="speedDisplay">1</strong>
+            </div>
+          </div>
+
+          <div class="controls">
+            <button class="btn btn-primary" id="startBtn">Start / Restart</button>
+            <button class="btn" id="pauseBtn">Pause</button>
+            <button class="btn" id="resetBoardBtn">Reset Board (clears scores)</button>
+          </div>
+
+          <div style="margin-top:6px; font-size:13px; color:var(--muted);">
+            <div style="font-weight:700; margin-bottom:6px;">Top 20</div>
+            <div id="leaderboard" class="leaderboard" aria-live="polite"></div>
+          </div>
+
+          <div style="margin-top:8px;">
+            <label for="playerName" style="font-size:13px;color:var(--muted)">Your name (for leaderboard)</label>
+            <input id="playerName" type="text" placeholder="e.g. Dani" maxlength="20" style="width:100%; padding:8px; margin-top:6px; border-radius:8px; border:1px solid rgba(0,0,0,0.06);">
+          </div>
+
+          <!-- Mobile D-pad (only appears on small screens) -->
+          <div class="mobile-controls" role="group" aria-label="Mobile controls">
+            <div class="dpad" id="dpad">
+              <!-- empty center and edges for layout; arrows in up/down/left/right slots -->
+              <div></div>
+              <button data-dir="up">▲</button>
+              <div></div>
+              <button data-dir="left">◀</button>
+              <div></div>
+              <button data-dir="right">▶</button>
+              <div></div>
+              <button data-dir="down">▼</button>
+              <div></div>
+            </div>
+          </div>
+
+          <div class="note">Tip: press R to restart. Eat the fruit to grow and score points.</div>
+        </div> <!-- right -->
+      </div> <!-- game-area -->
+    </div>
+  </div>
+
+  <script>
+    /*
+      Cute Snake — main game script
+      - Uses canvas for rendering
+      - localStorage key: "cute_snake_leaderboard"
+      - Leaderboard entry shape: { name: string, score: number, date: ISOstring }
+    */
+
+    /**********************
+     * Configuration
+     **********************/
+    const CONFIG = {
+      canvasSize: 340,      // canvas pixel size (square)
+      gridSize: 17,         // number of cells per side (higher -> smaller cells)
+      initialSpeed: 6,      // ticks per second initial
+      speedIncrementEvery: 5, // increase speed every X points
+      speedIncrementBy: 1,  // how much to increase each time
+      maxLeaderboard: 20,
+      storageKey: "cute_snake_leaderboard"
+    };
+
+    /**********************
+     * DOM elements
+     **********************/
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const scoreDisplay = document.getElementById("scoreDisplay");
+    const speedDisplay = document.getElementById("speedDisplay");
+    const startBtn = document.getElementById("startBtn");
+    const pauseBtn = document.getElementById("pauseBtn");
+    const resetBoardBtn = document.getElementById("resetBoardBtn");
+    const leaderboardEl = document.getElementById("leaderboard");
+    const playerNameInput = document.getElementById("playerName");
+    const dpad = document.getElementById("dpad");
+
+    /**********************
+     * Game state
+     **********************/
+    const CELL = Math.floor(CONFIG.canvasSize / CONFIG.gridSize); // pixel size per cell
+    let snake = [];         // array of {x,y} positions (grid coords)
+    let dir = { x: 1, y: 0 }; // current movement direction
+    let nextDir = { x: 1, y: 0 }; // queued direction (to avoid reverse)
+    let food = null;        // {x,y}
+    let score = 0;
+    let speed = CONFIG.initialSpeed;
+    let tickInterval = null;
+    let running = false;
+    let paused = false;
+
+    /**********************
+     * Helpers: random, equality
+     **********************/
+    function randInt(min, max) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+    function eq(p1, p2) { return p1.x === p2.x && p1.y === p2.y; }
+
+    /**********************
+     * Leaderboard storage
+     **********************/
+    function loadLeaderboard() {
+      const raw = localStorage.getItem(CONFIG.storageKey);
+      if (!raw) return [];
+      try {
+        const arr = JSON.parse(raw);
+        if (!Array.isArray(arr)) return [];
+        return arr;
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveLeaderboard(arr) {
+      localStorage.setItem(CONFIG.storageKey, JSON.stringify(arr.slice(0, CONFIG.maxLeaderboard)));
+    }
+
+    function addScoreToLeaderboard(name, scoreValue) {
+      const lb = loadLeaderboard();
+      lb.push({ name: name || "Anonymous", score: scoreValue, date: (new Date()).toISOString() });
+      lb.sort((a,b) => b.score - a.score || new Date(a.date) - new Date(b.date));
+      saveLeaderboard(lb);
+      renderLeaderboard();
+    }
+
+    function clearLeaderboard() {
+      localStorage.removeItem(CONFIG.storageKey);
+      renderLeaderboard();
+    }
+
+    function renderLeaderboard() {
+      const lb = loadLeaderboard();
+      if (lb.length === 0) {
+        leaderboardEl.innerHTML = `<div style="text-align:center; color:var(--muted); padding:18px;">No scores yet — be first! 🐣</div>`;
+        return;
+      }
+      leaderboardEl.innerHTML = ""; // clear
+      lb.slice(0, CONFIG.maxLeaderboard).forEach((entry, idx) => {
+        const el = document.createElement("div");
+        el.className = "entry";
+        el.innerHTML = `
+          <div>
+            <div style="font-size:13px; color:var(--muted)">${idx+1}${idx<3? ' ★':''}</div>
+            <div class="name">${escapeHtml(entry.name)}</div>
+            <div style="font-size:11px; color:var(--muted)">${new Date(entry.date).toLocaleString()}</div>
+          </div>
+          <div class="score">${entry.score}</div>
+        `;
+        leaderboardEl.appendChild(el);
+      });
+    }
+
+    /**********************
+     * Game initialization / reset
+     **********************/
+    function initGame() {
+      // Place snake in center length 3
+      snake = [];
+      const cx = Math.floor(CONFIG.gridSize / 2);
+      const cy = Math.floor(CONFIG.gridSize / 2);
+      snake.push({ x: cx - 1, y: cy });
+      snake.push({ x: cx, y: cy });
+      snake.push({ x: cx + 1, y: cy });
+      dir = { x: 1, y: 0 };
+      nextDir = { x: 1, y: 0 };
+      score = 0;
+      speed = CONFIG.initialSpeed;
+      spawnFood();
+      updateDisplays();
+      render(); // draw the initial board
+    }
+
+    function spawnFood() {
+      // Pick a random empty cell
+      let tries = 0;
+      while (tries < 1000) {
+        const fx = randInt(0, CONFIG.gridSize - 1);
+        const fy = randInt(0, CONFIG.gridSize - 1);
+        const collision = snake.some(s => s.x === fx && s.y === fy);
+        if (!collision) {
+          food = { x: fx, y: fy };
+          return;
+        }
+        tries++;
+      }
+      // fallback (rare)
+      food = { x: 0, y: 0 };
+    }
+
+    /**********************
+     * Input handling
+     **********************/
+    window.addEventListener("keydown", (e) => {
+      // Arrow keys + WASD + R (restart) + P (pause)
+      if (["ArrowUp","w","W","KeyW"].includes(e.code) || e.key === "w" || e.key === "W") setNextDir(0, -1);
+      if (["ArrowDown","s","S","KeyS"].includes(e.code) || e.key === "s" || e.key === "S") setNextDir(0, 1);
+      if (["ArrowLeft","a","A","KeyA"].includes(e.code) || e.key === "a" || e.key === "A") setNextDir(-1, 0);
+      if (["ArrowRight","d","D","KeyD"].includes(e.code) || e.key === "d" || e.key === "D") setNextDir(1, 0);
+
+      // Shortcuts
+      if (e.key === "r" || e.key === "R") {
+        startGame();
+      }
+      if (e.key === "p" || e.key === "P") {
+        togglePause();
+      }
+    });
+
+    // Mobile on-screen dpad
+    if (dpad) {
+      dpad.addEventListener("click", (ev) => {
+        const btn = ev.target.closest("button");
+        if (!btn) return;
+        const dirName = btn.dataset.dir;
+        if (dirName === "up") setNextDir(0, -1);
+        if (dirName === "down") setNextDir(0, 1);
+        if (dirName === "left") setNextDir(-1, 0);
+        if (dirName === "right") setNextDir(1, 0);
+      });
+    }
+
+    function setNextDir(x, y) {
+      // prevent reverse if snake length > 1
+      if (snake.length > 1 && x === -dir.x && y === -dir.y) return;
+      nextDir = { x, y };
+    }
+
+    /**********************
+     * Game loop
+     **********************/
+    function startGame() {
+      // If already running, reset to a fresh game
+      if (running) {
+        initGame();
+      } else {
+        initGame();
+        running = true;
+        paused = false;
+      }
+      // clear any previous interval
+      if (tickInterval) clearInterval(tickInterval);
+      // interval in ms based on speed (ticks per second)
+      tickInterval = setInterval(tick, 1000 / speed);
+      updateDisplays();
+    }
+
+    function stopGame() {
+      running = false;
+      paused = false;
+      if (tickInterval) {
+        clearInterval(tickInterval);
+        tickInterval = null;
+      }
+    }
+
+    function togglePause() {
+      if (!running) return;
+      paused = !paused;
+      pauseBtn.textContent = paused ? "Resume" : "Pause";
+      if (paused) {
+        if (tickInterval) clearInterval(tickInterval);
+        tickInterval = null;
+      } else {
+        tickInterval = setInterval(tick, 1000 / speed);
+      }
+    }
+
+    function tick() {
+      if (!running || paused) return;
+
+      // advance direction
+      dir = { ...nextDir };
+
+      // compute next head
+      const head = snake[snake.length - 1];
+      const newHead = { x: head.x + dir.x, y: head.y + dir.y };
+
+      // wrap-around behavior: snake wraps to other side for fun
+      if (newHead.x < 0) newHead.x = CONFIG.gridSize - 1;
+      if (newHead.x >= CONFIG.gridSize) newHead.x = 0;
+      if (newHead.y < 0) newHead.y = CONFIG.gridSize - 1;
+      if (newHead.y >= CONFIG.gridSize) newHead.y = 0;
+
+      // collision with self -> game over
+      if (snake.some(s => eq(s, newHead))) {
+        gameOver();
+        return;
+      }
+
+      // push new head
+      snake.push(newHead);
+
+      // check food
+      if (food && eq(newHead, food)) {
+        score += 1;
+        // possibly increase speed every few points
+        if (score % CONFIG.speedIncrementEvery === 0) {
+          speed += CONFIG.speedIncrementBy;
+          // restart interval with new speed if running
+          if (tickInterval) {
+            clearInterval(tickInterval);
+            tickInterval = setInterval(tick, 1000 / speed);
+          }
+        }
+        spawnFood();
+      } else {
+        // normal move: remove tail
+        snake.shift();
+      }
+
+      updateDisplays();
+      render();
+    }
+
+    /**********************
+     * Game over
+     **********************/
+    function gameOver() {
+      stopGame();
+      render(); // final render
+      // prompt for name (but prefer the name in the input)
+      const suggestedName = (playerNameInput.value || "").trim() || "Player";
+      // ask user to save score — we won't prompt with a blocking alert; we'll show a small overlay-like flow
+      const name = suggestedName; // take the typed name
+      // add to leaderboard
+      addScoreToLeaderboard(name, score);
+      // show a friendly message
+      setTimeout(() => {
+        // lightweight browser-native prompt alternative: small modal-like confirm
+        if (confirm(`Game over — you scored ${score}!\nSave score as "${name}"?`)) {
+          // already saved above
+          alert("Saved! Check the Top 20 on the right. Press Start to play again.");
+        } else {
+          // user declined to keep name — allow editing and still saved with 'Anonymous' if wanted
+          if (confirm("Discard the saved entry and store as 'Anonymous' instead?")) {
+            // remove last saved and re-add as Anonymous
+            let lb = loadLeaderboard();
+            // find last equal score and same name and remove only one
+            const idx = lb.findIndex(e => e.score === score && e.name === name);
+            if (idx !== -1) lb.splice(idx,1);
+            saveLeaderboard(lb);
+            addScoreToLeaderboard("Anonymous", score);
+          }
+        }
+      }, 50);
+    }
+
+    /**********************
+     * Rendering
+     **********************/
+    function render() {
+      // clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // draw background grid softly
+      drawGrid();
+
+      // draw food
+      if (food) {
+        drawCell(food.x, food.y, (ctx) => {
+          // cute fruit: draw a heart-ish sprite with emoji fallback
+          ctx.fillStyle = "#ff5a8a";
+          roundRect(ctx, 0.12*CELL, 0.12*CELL, CELL*0.76, CELL*0.76, CELL*0.18);
+          ctx.fill();
+          // stem
+          ctx.fillStyle = "#3f7a3f";
+          ctx.fillRect(CELL*0.52, CELL*0.02, CELL*0.06, CELL*0.18);
+        });
+      }
+
+      // draw snake: from tail to head
+      for (let i = 0; i < snake.length; i++) {
+        const s = snake[i];
+        const t = i === snake.length - 1; // head?
+        drawCell(s.x, s.y, (ctx) => {
+          // body gradient and round corners
+          const progress = i / snake.length;
+          // compute color blend
+          const r1 = [255, 139, 158]; // pink
+          const r2 = [81, 214, 140];  // mint
+          const mix = (a,b,p)=> a.map((v,idx)=> Math.round(v*(1-p)+b[idx]*p));
+          const colArr = mix(r1, r2, progress * 0.6);
+          ctx.fillStyle = `rgb(${colArr.join(",")})`;
+          roundRect(ctx, CELL*0.09, CELL*0.09, CELL*0.82, CELL*0.82, CELL*0.2);
+          ctx.fill();
+
+          // eyes on head
+          if (t) {
+            ctx.fillStyle = "#1a1a1a";
+            const eyeSize = CELL*0.08;
+            ctx.beginPath();
+            ctx.arc(CELL*0.35, CELL*0.38, eyeSize, 0, Math.PI*2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(CELL*0.65, CELL*0.38, eyeSize, 0, Math.PI*2);
+            ctx.fill();
+          }
+        });
+      }
+    }
+
+    function drawGrid() {
+      // subtle checker background
+      for (let y = 0; y < CONFIG.gridSize; y++) {
+        for (let x = 0; x < CONFIG.gridSize; x++) {
+          const even = (x + y) % 2 === 0;
+          ctx.fillStyle = even ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.01)";
+          ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+        }
+      }
+    }
+
+    // draw a single cell by grid coords and supply custom drawing in local space
+    function drawCell(gridX, gridY, drawFn) {
+      ctx.save();
+      ctx.translate(gridX * CELL, gridY * CELL);
+      // provide a tiny padding for nice rounded shape
+      drawFn(ctx);
+      ctx.restore();
+    }
+
+    // Minimal rounded rectangle path helper
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    /**********************
+     * UI updates
+     **********************/
+    function updateDisplays() {
+      scoreDisplay.textContent = score;
+      speedDisplay.textContent = speed;
+    }
+
+    /**********************
+     * Utility: escape html for safe rendering of names
+     **********************/
+    function escapeHtml(unsafe) {
+      return unsafe
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    /**********************
+     * Event wiring for buttons
+     **********************/
+    startBtn.addEventListener("click", () => {
+      startGame();
+    });
+
+    pauseBtn.addEventListener("click", () => {
+      togglePause();
+    });
+
+    resetBoardBtn.addEventListener("click", () => {
+      if (confirm("This will clear the Top 20 leaderboard (stored in your browser). Continue?")) {
+        clearLeaderboard();
+        alert("Leaderboard cleared.");
+      }
+    });
+
+    // when user changes name in input, persist to localStorage for convenience
+    playerNameInput.addEventListener("change", () => {
+      localStorage.setItem("cute_snake_player_name", playerNameInput.value);
+    });
+
+    // restore last typed name
+    (function restoreName(){
+      const saved = localStorage.getItem("cute_snake_player_name");
+      if (saved) playerNameInput.value = saved;
+    })();
+
+    /**********************
+     * Resize canvas to device pixel ratio for crisp drawing
+     **********************/
+    function adjustCanvasForDisplay() {
+      const dpr = window.devicePixelRatio || 1;
+      const size = CONFIG.canvasSize;
+      canvas.width = size * dpr;
+      canvas.height = size * dpr;
+      canvas.style.width = size + "px";
+      canvas.style.height = size + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // scale drawing operations
+    }
+    adjustCanvasForDisplay();
+    window.addEventListener("resize", () => {
+      adjustCanvasForDisplay();
+      render();
+    });
+
+    /**********************
+     * Startup: render leaderboard and initial game
+     **********************/
+    renderLeaderboard();
+    initGame();
+    render();
+
+    /**********************
+     * Accessibility / additional niceties
+     **********************/
+    // Informative ARIA live region updates on leaderboard changes:
+    const originalSave = saveLeaderboard;
+    // No need to override saveLeaderboard; renderLeaderboard updates aria-live content.
+
+    // Keep focus on canvas for keyboard controls when clicked
+    canvas.addEventListener("click", () => canvas.focus());
+  </script>
+</body>
+</html>
